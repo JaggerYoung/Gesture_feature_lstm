@@ -40,6 +40,13 @@ def Accuracy(label, pred):
 	total += 1.0
     return hit/total
 
+def _save_model(rank=0):
+    model_prefix = './model/lstm'
+    dst_dir = os.path.dirname(model_prefix)
+    if not os.path.isdir(dst_dir):
+        os.mkdir(dst_dir)
+    return mx.callback.do_checkpoint(model_prefix if rank == 0 else "%s-%d"%(model_prefix, rank))
+
 class LRCNIter(mx.io.DataIter):
     def __init__(self, dataset, labelset, num, listset, batch_size, seq_len, init_states):
         
@@ -68,9 +75,11 @@ class LRCNIter(mx.io.DataIter):
 		ret = 0
 		for j in range(idx):
 		    ret += self.listset[j]
-		tmp = random.randint(0, self.listset[idx]-self.seq_len)
+		#tmp = random.randint(0, self.listset[idx]-self.seq_len)
+		le = self.listset[idx]/self.seq_len
 		for j in range(self.seq_len):
-	            idx_1 = ret + tmp + j
+		    tmp = random.randint(j*len, (j+1)*len)
+	            idx_1 = ret + tmp
 		    data_seq.append(self.dataset[idx_1])
 		    label_seq.append(self.labelset[idx_1])
 		data.append(data_seq)
@@ -92,13 +101,13 @@ if __name__ == '__main__':
     num_lstm_layer = 2
     batch_size = BATCH_SIZE
 
-    num_epoch = 500
+    num_epoch = 400
     learning_rate = 0.0025
     momentum = 0.0015
     num_label = 5
     seq_len = 10
     
-    contexts = [mx.context.gpu(3)]
+    contexts = [mx.context.gpu(2)]
 
     def sym_gen(seq_len):
         return lstm_unroll(num_lstm_layer, seq_len, num_hidden, num_label)
@@ -147,4 +156,8 @@ if __name__ == '__main__':
     batch_end_callbacks = [mx.callback.Speedometer(BATCH_SIZE, 100)]
     debug_metrics = mx.metric.np(Accuracy)
 
+    checkpoint = _save_model(0)
+
+    #model.fit(X=data_train, eval_data=data_test, eval_metric=debug_metrics, batch_end_callback=batch_end_callbacks, epoch_end_callback=checkpoint)
     model.fit(X=data_train, eval_data=data_test, eval_metric=debug_metrics, batch_end_callback=batch_end_callbacks)
+    model.save("./model/lstm", 400)
